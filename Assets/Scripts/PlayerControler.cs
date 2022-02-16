@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using TMPro;
 
 public class PlayerControler : MonoBehaviour
 {
@@ -14,8 +15,15 @@ public class PlayerControler : MonoBehaviour
     private float activeMoveSpeed;
     private Camera cam;
     public Transform groundCheckPoint, wallCheckPoint;
-    private bool isGrounded, canWallRunRight, canWallRunLeft, canWallClimb, canWallJump;
+    private bool isGrounded, canWallRunRight, canWallRunLeft, canWallClimb, canWallJump, isReloading;
     public LayerMask groundLayers, wallLayers;
+    public GameObject bulletImpact;
+    public float timeBetweenShots;
+    public float shotCounter;
+    public int ammoCount, maxAmmoCount;
+    public TextMeshPro ammoDisplay;
+    public int reloadTime;
+
 
     // Start is called before the first frame update
     void Start()
@@ -69,18 +77,18 @@ public class PlayerControler : MonoBehaviour
 
         }
 
-        //Jump
+        //Jump checks
         isGrounded = Physics.Raycast(groundCheckPoint.position, Vector3.down, .25f, groundLayers);
         canWallClimb = Physics.Raycast(transform.position, wallCheckPoint.forward, 1f, wallLayers);
         canWallRunRight = Physics.Raycast(transform.position, wallCheckPoint.right, 1f, wallLayers);
         canWallRunLeft = Physics.Raycast(transform.position, -wallCheckPoint.right, 1f, wallLayers);
         canWallJump = canWallClimb || canWallRunLeft || canWallRunRight;
 
+        //Jumping
         if (Input.GetButtonDown("Jump") && (isGrounded || canWallJump))
         {
             movement.y = jumpForce;
         }
-
 
         movement.y += Physics.gravity.y * Time.deltaTime * gravityMod;
 
@@ -98,7 +106,67 @@ public class PlayerControler : MonoBehaviour
             }
         }
 
+        if (isReloading)
+            return;
+        //Shooting
+        //Single Shot
+        if (Input.GetMouseButtonDown(0))
+        {
+                Shoot();
+        }
+        //Autofire
+        if (Input.GetMouseButton(0))
+        {
+            shotCounter -= Time.deltaTime;
+
+            if (shotCounter <= 0)
+            {
+                    Shoot();
+            } 
+
+        }
+        //Reload
+        if (Input.GetKeyDown(KeyCode.R) || ammoCount == 0)
+        {
+            StartCoroutine(Reload());
+        }
+
+
+        //AmmoDisplay
+        ammoDisplay.SetText(ammoCount + "/" + maxAmmoCount);
+
+
     }
+
+    private void Shoot()
+    {
+        if (ammoCount != 0)
+        {
+            ammoCount -= 1;
+            Ray ray = cam.ViewportPointToRay(new Vector3(.5f, .5f, 0f));
+            ray.origin = cam.transform.position;
+
+            if (Physics.Raycast(ray, out RaycastHit hit))
+            {
+                GameObject bulletImpactObject = Instantiate(bulletImpact, hit.point + (hit.normal * .002f), Quaternion.LookRotation(hit.normal, Vector3.up));
+                Destroy(bulletImpactObject, 2f);
+            }
+
+            shotCounter = timeBetweenShots;
+        }
+    }
+
+    IEnumerator Reload()
+    {
+        isReloading = true;
+        Debug.Log("Start Reloading");
+        ammoCount = 0;
+        yield return new WaitForSeconds(reloadTime);
+        ammoCount = maxAmmoCount;
+        Debug.Log("Reloaded");
+        isReloading = false;
+    }
+
     private void LateUpdate()
     {
         cam.transform.position = viewPoint.position;
