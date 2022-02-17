@@ -18,11 +18,13 @@ public class PlayerControler : MonoBehaviour
     private bool isGrounded, canWallRunRight, canWallRunLeft, canWallClimb, canWallJump, isReloading;
     public LayerMask groundLayers, wallLayers;
     public GameObject bulletImpact;
-    public float timeBetweenShots;
+    // public float timeBetweenShots;
     public float shotCounter;
-    public int ammoCount, maxAmmoCount;
+    // public int ammoCount, maxAmmoCount;
     public TextMeshPro ammoDisplay;
     public int reloadTime;
+    public Gun[] allGuns;
+    private int selectedGun;
 
 
     // Start is called before the first frame update
@@ -31,6 +33,8 @@ public class PlayerControler : MonoBehaviour
         Cursor.lockState = CursorLockMode.Locked;
 
         cam = Camera.main;
+
+        SwitchGun();
     }
 
     // Update is called once per frame
@@ -108,6 +112,8 @@ public class PlayerControler : MonoBehaviour
 
         if (isReloading)
             return;
+
+
         //Shooting
         //Single Shot
         if (Input.GetMouseButtonDown(0))
@@ -115,7 +121,7 @@ public class PlayerControler : MonoBehaviour
                 Shoot();
         }
         //Autofire
-        if (Input.GetMouseButton(0))
+        if (Input.GetMouseButton(0) && allGuns[selectedGun].isAutomatic)
         {
             shotCounter -= Time.deltaTime;
 
@@ -126,23 +132,45 @@ public class PlayerControler : MonoBehaviour
 
         }
         //Reload
-        if (Input.GetKeyDown(KeyCode.R) || ammoCount == 0)
+        if (Input.GetKeyDown(KeyCode.R) || allGuns[selectedGun].ammoCount == 0)
         {
             StartCoroutine(Reload());
         }
 
 
         //AmmoDisplay
-        ammoDisplay.SetText(ammoCount + "/" + maxAmmoCount);
+        UiController.instance.ammo.SetText(allGuns[selectedGun].ammoCount + " / " + allGuns[selectedGun].maxAmmoCount);
+
+        if (Input.GetAxisRaw("Mouse ScrollWheel") > 0f)
+        {
+            selectedGun++;
+            if (selectedGun >= allGuns.Length)
+            {
+                selectedGun = 0;
+            }
+            SwitchGun();
+        }
+        else if (Input.GetAxisRaw("Mouse ScrollWheel") < 0f)
+        {
+            selectedGun--;
+            if (selectedGun < 0)
+            {
+                selectedGun = allGuns.Length-1;
+            }
+            SwitchGun();
+        }
+
+
+
 
 
     }
 
     private void Shoot()
     {
-        if (ammoCount != 0)
+        if (allGuns[selectedGun].ammoCount != 0)
         {
-            ammoCount -= 1;
+            allGuns[selectedGun].ammoCount -= 1;
             Ray ray = cam.ViewportPointToRay(new Vector3(.5f, .5f, 0f));
             ray.origin = cam.transform.position;
 
@@ -152,24 +180,36 @@ public class PlayerControler : MonoBehaviour
                 Destroy(bulletImpactObject, 2f);
             }
 
-            shotCounter = timeBetweenShots;
+            shotCounter = allGuns[selectedGun].timeBetweenShots;
         }
     }
 
     IEnumerator Reload()
     {
         isReloading = true;
+        UiController.instance.reloading.gameObject.SetActive(true);
         Debug.Log("Start Reloading");
-        ammoCount = 0;
+        allGuns[selectedGun].ammoCount = 0;
         yield return new WaitForSeconds(reloadTime);
-        ammoCount = maxAmmoCount;
+        allGuns[selectedGun].ammoCount = allGuns[selectedGun].maxAmmoCount;
         Debug.Log("Reloaded");
         isReloading = false;
+        UiController.instance.reloading.gameObject.SetActive(false);
     }
 
     private void LateUpdate()
     {
         cam.transform.position = viewPoint.position;
         cam.transform.rotation = viewPoint.rotation;
+    }
+
+    void SwitchGun()
+    {
+        foreach(Gun gun in allGuns)
+        {
+            gun.gameObject.SetActive(false);
+        }
+
+        allGuns[selectedGun].gameObject.SetActive(true);
     }
 }
