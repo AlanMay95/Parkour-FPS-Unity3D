@@ -602,7 +602,7 @@ MonoBehaviour:
     m_Bits: 256
   bulletImpact: {fileID: 6988228546521061005, guid: d0bff38073a6c6e4b937e105482d2f54, type: 3}
   shotCounter: 0
-  ammoDisplay: {fileID: 0}
+  muzzelDisplayTime: 0.016666668
   reloadTime: 1
   allGuns:
   - {fileID: 1681372245}

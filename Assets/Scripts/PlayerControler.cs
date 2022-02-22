@@ -16,15 +16,16 @@ public class PlayerControler : MonoBehaviour
     private Camera cam;
     public Transform groundCheckPoint, wallCheckPoint;
     private bool isGrounded, canWallRunRight, canWallRunLeft, canWallClimb, canWallJump, isReloading;
-    public LayerMask groundLayers, wallLayers;
+    public LayerMask groundLayers, wallLayers, killBoxLayers;
     public GameObject bulletImpact;
-    // public float timeBetweenShots;
     public float shotCounter;
-    // public int ammoCount, maxAmmoCount;
-    public TextMeshPro ammoDisplay;
+    public float muzzelDisplayTime;
+    private float muzzleCounter;
     public int reloadTime;
     public Gun[] allGuns;
     private int selectedGun;
+    private bool killBox;
+
 
 
     // Start is called before the first frame update
@@ -35,6 +36,10 @@ public class PlayerControler : MonoBehaviour
         cam = Camera.main;
 
         SwitchGun();
+
+        Transform newTrans = SpawnManager.instance.GetFFASpawnPoint();
+        transform.position = newTrans.position;
+        transform.rotation = newTrans.rotation;
     }
 
     // Update is called once per frame
@@ -82,10 +87,10 @@ public class PlayerControler : MonoBehaviour
         }
 
         //Jump checks
-        isGrounded = Physics.Raycast(groundCheckPoint.position, Vector3.down, .25f, groundLayers);
-        canWallClimb = Physics.Raycast(transform.position, wallCheckPoint.forward, 1f, wallLayers);
-        canWallRunRight = Physics.Raycast(transform.position, wallCheckPoint.right, 1f, wallLayers);
-        canWallRunLeft = Physics.Raycast(transform.position, -wallCheckPoint.right, 1f, wallLayers);
+        isGrounded = Physics.Raycast(groundCheckPoint.position, Vector3.down, .5f, groundLayers);
+        canWallClimb = Physics.Raycast(transform.position, wallCheckPoint.forward, 1f, groundLayers);
+        canWallRunRight = Physics.Raycast(transform.position, wallCheckPoint.right, 1f, groundLayers);
+        canWallRunLeft = Physics.Raycast(transform.position, -wallCheckPoint.right, 1f, groundLayers);
         canWallJump = canWallClimb || canWallRunLeft || canWallRunRight;
 
         //Jumping
@@ -107,6 +112,16 @@ public class PlayerControler : MonoBehaviour
             if (Input.GetMouseButtonDown(0))
             {
                 Cursor.lockState = CursorLockMode.Locked;
+            }
+        }
+
+        if (allGuns[selectedGun].muzzleFlash.activeInHierarchy)
+        {
+            muzzleCounter -= Time.deltaTime;
+
+            if (muzzleCounter <= 0)
+            {
+                allGuns[selectedGun].muzzleFlash.SetActive(false);
             }
         }
 
@@ -141,6 +156,7 @@ public class PlayerControler : MonoBehaviour
         //AmmoDisplay
         UiController.instance.ammo.SetText(allGuns[selectedGun].ammoCount + " / " + allGuns[selectedGun].maxAmmoCount);
 
+        //Wepon Swap
         if (Input.GetAxisRaw("Mouse ScrollWheel") > 0f)
         {
             selectedGun++;
@@ -159,6 +175,27 @@ public class PlayerControler : MonoBehaviour
             }
             SwitchGun();
         }
+
+
+        
+        for(int i = 0; i < allGuns.Length; i++)
+        {
+            if (Input.GetKeyDown((i + 1).ToString()))
+            {
+                selectedGun = i;
+                SwitchGun();
+            }
+        }
+
+
+
+        //Kill Box
+        killBox = Physics.Raycast(transform.position, -groundCheckPoint.up, 1f, killBoxLayers);
+        if (killBox)
+        {
+            Debug.Log("PLAYER HAS DIED");
+        }
+
 
 
 
@@ -182,6 +219,8 @@ public class PlayerControler : MonoBehaviour
 
             shotCounter = allGuns[selectedGun].timeBetweenShots;
         }
+        allGuns[selectedGun].muzzleFlash.SetActive(true);
+        muzzleCounter = muzzelDisplayTime;
     }
 
     IEnumerator Reload()
@@ -211,5 +250,6 @@ public class PlayerControler : MonoBehaviour
         }
 
         allGuns[selectedGun].gameObject.SetActive(true);
+        allGuns[selectedGun].muzzleFlash.SetActive(false);
     }
 }
