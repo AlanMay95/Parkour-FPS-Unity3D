@@ -18,7 +18,7 @@ public class Launcher : MonoBehaviourPunCallbacks
     public TMP_Text loadingText;   
     public GameObject menuButtons;
     public GameObject createGameScreen;
-    public TMP_InputField roomNameInput;
+    public TMP_InputField gameNameInput;
     public GameObject gamePanel;
     public TMP_Text gameName, playerName;
     private List<TMP_Text> allPlayerNames = new List<TMP_Text>();
@@ -98,12 +98,12 @@ public class Launcher : MonoBehaviourPunCallbacks
 
     public void CreateRoom()
     {
-        if (roomNameInput.text != "")
+        if (!string.IsNullOrEmpty(gameName.text))
         {
             RoomOptions options = new RoomOptions();
             options.MaxPlayers = 12;
 
-            PhotonNetwork.CreateRoom(roomNameInput.text, options);
+            PhotonNetwork.CreateRoom(gameNameInput.text, options);
 
             CloseMenus();
             loadingScreen.SetActive(true);
@@ -243,7 +243,7 @@ public class Launcher : MonoBehaviourPunCallbacks
 
     public void SetName()
     {
-        if(nameInput.text != "")
+        if(!string.IsNullOrEmpty(nameInput.text))
         {
             PhotonNetwork.NickName = nameInput.text;
 

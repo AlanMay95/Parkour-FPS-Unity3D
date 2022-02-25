@@ -7,7 +7,7 @@ using Photon.Pun;
 public class PlayerControler : MonoBehaviourPunCallbacks
 {
     public Transform viewPoint;
-    public float mouseSensativity = 1.5f, moveSpeed = 5f, runSpeed = 8f, jumpForce = 3f, gravityMod = .9f;
+    public float mouseSensativity = 1.5f, moveSpeed = 5f, runSpeed = 8f, wallRunSpeed = 10f, jumpForce = 3f, gravityMod = .9f;
     private float vertRotStore;
     public Vector2 mouseInput;
     public bool invertLook;
@@ -22,11 +22,18 @@ public class PlayerControler : MonoBehaviourPunCallbacks
     public float shotCounter;
     public float muzzelDisplayTime;
     private float muzzleCounter;
-    public int reloadTime;
     public Gun[] allGuns;
     private int selectedGun;
     private bool killBox;
     public GameObject playerHitImpact;
+    public float maxHealth = 100;
+    public float currentHealth = 100;
+    public float healFactor;
+    public float missingHelath = 0;
+    public Animator knifeAnim;
+    private bool canDoubleJump;
+    public float timeToHeal = 2f;
+
 
 
 
@@ -37,7 +44,9 @@ public class PlayerControler : MonoBehaviourPunCallbacks
 
         cam = Camera.main;
 
-        SwitchGun();
+        photonView.RPC("SetGun", RpcTarget.All, selectedGun);
+        UiController.instance.damageIndicator.gameObject.SetActive(false);
+
 
         //Transform newTrans = SpawnManager.instance.GetFFASpawnPoint();
         //transform.position = newTrans.position;
@@ -56,7 +65,7 @@ public class PlayerControler : MonoBehaviourPunCallbacks
 
             //Vertical Camera
             vertRotStore += mouseInput.y;
-            vertRotStore = Mathf.Clamp(vertRotStore, -60f, 60f);
+            vertRotStore = Mathf.Clamp(vertRotStore, -85f, 85f);
             //Camera Inversion
             if (invertLook)
             {
@@ -71,7 +80,11 @@ public class PlayerControler : MonoBehaviourPunCallbacks
             moveDir = new Vector3(Input.GetAxisRaw("Horizontal"), 0f, Input.GetAxisRaw("Vertical"));
 
             //Sprint check
-            if (Input.GetKey(KeyCode.LeftShift))
+            if((canWallRunLeft || canWallRunRight) && !isGrounded)
+            {
+                activeMoveSpeed = wallRunSpeed;
+            }
+            else if (Input.GetKey(KeyCode.LeftShift))
             {
                 activeMoveSpeed = runSpeed;
             }
@@ -98,10 +111,23 @@ public class PlayerControler : MonoBehaviourPunCallbacks
             canWallRunLeft = Physics.Raycast(transform.position, -wallCheckPoint.right, 1f, groundLayers);
             canWallJump = canWallClimb || canWallRunLeft || canWallRunRight;
 
-            //Jumping
-            if (Input.GetButtonDown("Jump") && (isGrounded || canWallJump))
+            if (isGrounded || canWallJump)
             {
-                movement.y = jumpForce;
+                canDoubleJump = true;
+            }
+
+            //Jumping
+            if (Input.GetButtonDown("Jump"))
+            {
+                if (isGrounded || canWallJump)
+                {
+                    Jump();
+                }
+                else if (canDoubleJump)
+                {
+                    Jump();
+                    canDoubleJump = false;
+                }
             }
 
             movement.y += Physics.gravity.y * Time.deltaTime * gravityMod;
@@ -131,18 +157,22 @@ public class PlayerControler : MonoBehaviourPunCallbacks
                 }
             }
 
-            if (isReloading)
-                return;
-
 
             //Shooting
             //Single Shot
             if (Input.GetMouseButtonDown(0))
             {
-                Shoot();
+                if (!isReloading && selectedGun != 0)
+                {
+                    Shoot();
+                }
+                else if (selectedGun == 0)
+                {
+                    Stab();
+                } 
             }
             //Autofire
-            if (Input.GetMouseButton(0) && allGuns[selectedGun].isAutomatic)
+            if (Input.GetMouseButton(0) && allGuns[selectedGun].isAutomatic && !isReloading && selectedGun != 0)
             {
                 shotCounter -= Time.deltaTime;
 
@@ -153,9 +183,9 @@ public class PlayerControler : MonoBehaviourPunCallbacks
 
             }
             //Reload
-            if (Input.GetKeyDown(KeyCode.R) || allGuns[selectedGun].ammoCount == 0)
+            if (!isReloading && selectedGun != 0 && ((Input.GetKeyDown(KeyCode.R) || (Input.GetMouseButtonDown(0) && allGuns[selectedGun].ammoCount == 0))))
             {
-                StartCoroutine(Reload());
+                StartCoroutine("Reload");
             }
 
 
@@ -170,16 +200,17 @@ public class PlayerControler : MonoBehaviourPunCallbacks
                 {
                     selectedGun = 0;
                 }
-                SwitchGun();
+                photonView.RPC("SetGun", RpcTarget.All, selectedGun);
             }
             else if (Input.GetAxisRaw("Mouse ScrollWheel") < 0f)
             {
+                
                 selectedGun--;
                 if (selectedGun < 0)
                 {
                     selectedGun = allGuns.Length - 1;
                 }
-                SwitchGun();
+                photonView.RPC("SetGun", RpcTarget.All, selectedGun);
             }
 
 
@@ -189,23 +220,41 @@ public class PlayerControler : MonoBehaviourPunCallbacks
                 if (Input.GetKeyDown((i + 1).ToString()))
                 {
                     selectedGun = i;
-                    SwitchGun();
+                    photonView.RPC("SetGun", RpcTarget.All, selectedGun);
                 }
             }
-
-
 
             //Kill Box
            
             killBox = Physics.Raycast(transform.position, -groundCheckPoint.up, 1f, killBoxLayers);
             if (killBox)
             {
-                Debug.Log("PLAYER HAS DIED");
-                gameObject.SetActive(false);
+                PlayerSpawner.instance.Die("Out of bounds");
             }
             
+            if (currentHealth < maxHealth)
+            {
+                timeToHeal -= Time.deltaTime;
+                missingHelath = ((maxHealth - currentHealth) * .01f);
 
+                UiController.instance.damageIndicator.gameObject.SetActive(true);
+                var tempColor = UiController.instance.damageIndicator.color;
+                tempColor.a = missingHelath;
+                UiController.instance.damageIndicator.color = tempColor;
 
+                if (timeToHeal <= 0)
+                {
+                    currentHealth += healFactor;
+                    missingHelath = ((maxHealth - currentHealth) * .01f);
+                    tempColor.a = missingHelath;
+                    UiController.instance.damageIndicator.color = tempColor;
+                }
+            }
+            else if(currentHealth >= maxHealth)
+            {
+                currentHealth = maxHealth;
+                UiController.instance.damageIndicator.gameObject.SetActive(false);
+            }
 
         }
 
@@ -213,7 +262,7 @@ public class PlayerControler : MonoBehaviourPunCallbacks
 
     private void Shoot()
     {
-        if (allGuns[selectedGun].ammoCount != 0)
+        if (allGuns[selectedGun].ammoCount != 0 && !isReloading)
         {
             allGuns[selectedGun].ammoCount -= 1;
             Ray ray = cam.ViewportPointToRay(new Vector3(.5f, .5f, 0f));
@@ -225,8 +274,10 @@ public class PlayerControler : MonoBehaviourPunCallbacks
                 {
                     Debug.Log("Hit " + hit.collider.gameObject.GetPhotonView().Owner.NickName);
                     PhotonNetwork.Instantiate(playerHitImpact.name, hit.point, Quaternion.identity);
+                    StartCoroutine(HitMarker());
+                    
 
-                    hit.collider.gameObject.GetPhotonView().RPC("DealDamage", RpcTarget.All, photonView.Owner.NickName);
+                    hit.collider.gameObject.GetPhotonView().RPC("DealDamage", RpcTarget.All, photonView.Owner.NickName, allGuns[selectedGun].damage);
                 }
                 else
                 {
@@ -236,39 +287,85 @@ public class PlayerControler : MonoBehaviourPunCallbacks
             }
 
             shotCounter = allGuns[selectedGun].timeBetweenShots;
+            allGuns[selectedGun].muzzleFlash.SetActive(true);
+            muzzleCounter = muzzelDisplayTime;
         }
-        allGuns[selectedGun].muzzleFlash.SetActive(true);
-        muzzleCounter = muzzelDisplayTime;
+    }
+
+    private void Stab()
+    {
+        Ray ray = cam.ViewportPointToRay(new Vector3(.5f, .5f, 0f));
+        ray.origin = cam.transform.position;
+        knifeAnim.SetTrigger("Stab");
+        
+
+
+        if (Physics.Raycast(ray, out RaycastHit hit, 2.5f))
+        {
+            if (hit.collider.gameObject.tag == "Player")
+            {
+                Debug.Log("Hit " + hit.collider.gameObject.GetPhotonView().Owner.NickName);
+                PhotonNetwork.Instantiate(playerHitImpact.name, hit.point, Quaternion.identity);
+                StartCoroutine(HitMarker());
+
+
+                hit.collider.gameObject.GetPhotonView().RPC("DealDamage", RpcTarget.All, photonView.Owner.NickName, allGuns[selectedGun].damage);
+            }
+            else
+            {
+                GameObject bulletImpactObject = Instantiate(bulletImpact, hit.point + (hit.normal * .002f), Quaternion.LookRotation(hit.normal, Vector3.up));
+                Destroy(bulletImpactObject, 2f);
+            }
+        }
+    }
+
+    private void Jump()
+    {
+        movement.y = jumpForce;
+    }
+
+    IEnumerator HitMarker()
+    {
+        UiController.instance.hitMarker.gameObject.SetActive(true);
+        yield return new WaitForSeconds(1f);
+        UiController.instance.hitMarker.gameObject.SetActive(false);
     }
 
     IEnumerator Reload()
     {
         isReloading = true;
         UiController.instance.reloading.gameObject.SetActive(true);
-        Debug.Log("Start Reloading");
         allGuns[selectedGun].ammoCount = 0;
-        yield return new WaitForSeconds(reloadTime);
+        yield return new WaitForSeconds(allGuns[selectedGun].reloadTime);
         allGuns[selectedGun].ammoCount = allGuns[selectedGun].maxAmmoCount;
-        Debug.Log("Reloaded");
         isReloading = false;
         UiController.instance.reloading.gameObject.SetActive(false);
     }
 
     [PunRPC]
-    public void DealDamage(string damager)
+    public void DealDamage(string damager, int damageAmount)
     {
-        TakeDamage(damager);
+        TakeDamage(damager, damageAmount);
     }
 
-    public void TakeDamage(string damager)
+    public void TakeDamage(string damager, int damageAmount)
     {
         if (photonView.IsMine)
         {
             //Debug.Log(photonView.Owner.NickName + " has been hit by " + damager);
 
-            PlayerSpawner.instance.Die();
+            currentHealth -= damageAmount;
+            timeToHeal = 2f;
+            
+            if (currentHealth <= 0)
+            {
+                currentHealth = 0;
+                PlayerSpawner.instance.Die(damager);
+            }
         }
     }
+
+    
 
     private void LateUpdate()
     {
@@ -281,6 +378,9 @@ public class PlayerControler : MonoBehaviourPunCallbacks
 
     void SwitchGun()
     {
+        StopCoroutine("Reload");
+        UiController.instance.reloading.gameObject.SetActive(false);
+        isReloading = false;
         foreach(Gun gun in allGuns)
         {
             gun.gameObject.SetActive(false);
@@ -288,5 +388,15 @@ public class PlayerControler : MonoBehaviourPunCallbacks
 
         allGuns[selectedGun].gameObject.SetActive(true);
         allGuns[selectedGun].muzzleFlash.SetActive(false);
+    }
+
+    [PunRPC]
+    public void SetGun(int gunToSwitchTo)
+    {
+        if(gunToSwitchTo < allGuns.Length)
+        {
+            selectedGun = gunToSwitchTo;
+            SwitchGun();
+        }
     }
 }
