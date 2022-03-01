@@ -33,6 +33,7 @@ public class PlayerControler : MonoBehaviourPunCallbacks
     public Animator knifeAnim;
     private bool canDoubleJump;
     public float timeToHeal = 2f;
+    public Animator pAnim;
 
 
 
@@ -115,7 +116,19 @@ public class PlayerControler : MonoBehaviourPunCallbacks
             {
                 canDoubleJump = true;
             }
+            
+            // Standing animation
+            if (isGrounded)
+            {
+                pAnim.SetBool("grounded", true);
+            }
+            else
+            {
+                pAnim.SetBool("grounded", false);
+            }
+            pAnim.SetFloat("speed", moveDir.magnitude);
 
+            
             //Jumping
             if (Input.GetButtonDown("Jump"))
             {
@@ -277,7 +290,7 @@ public class PlayerControler : MonoBehaviourPunCallbacks
                     StartCoroutine(HitMarker());
                     
 
-                    hit.collider.gameObject.GetPhotonView().RPC("DealDamage", RpcTarget.All, photonView.Owner.NickName, allGuns[selectedGun].damage);
+                    hit.collider.gameObject.GetPhotonView().RPC("DealDamage", RpcTarget.All, photonView.Owner.NickName, allGuns[selectedGun].damage, PhotonNetwork.LocalPlayer.ActorNumber);
                 }
                 else
                 {
@@ -298,24 +311,28 @@ public class PlayerControler : MonoBehaviourPunCallbacks
         ray.origin = cam.transform.position;
         knifeAnim.SetTrigger("Stab");
         
+         
 
-
-        if (Physics.Raycast(ray, out RaycastHit hit, 2.5f))
+        if (Physics.Raycast(ray, out RaycastHit hit))
         {
-            if (hit.collider.gameObject.tag == "Player")
+            if (hit.distance <= 3)
             {
-                Debug.Log("Hit " + hit.collider.gameObject.GetPhotonView().Owner.NickName);
-                PhotonNetwork.Instantiate(playerHitImpact.name, hit.point, Quaternion.identity);
-                StartCoroutine(HitMarker());
+                if (hit.collider.gameObject.tag == "Player")
+                {
+                    Debug.Log("Hit " + hit.collider.gameObject.GetPhotonView().Owner.NickName);
+                    PhotonNetwork.Instantiate(playerHitImpact.name, hit.point, Quaternion.identity);
+                    StartCoroutine(HitMarker());
 
 
-                hit.collider.gameObject.GetPhotonView().RPC("DealDamage", RpcTarget.All, photonView.Owner.NickName, allGuns[selectedGun].damage);
+                    hit.collider.gameObject.GetPhotonView().RPC("DealDamage", RpcTarget.All, photonView.Owner.NickName, allGuns[selectedGun].damage, PhotonNetwork.LocalPlayer.ActorNumber);
+                }
+                else
+                {
+                    GameObject bulletImpactObject = Instantiate(bulletImpact, hit.point + (hit.normal * .002f), Quaternion.LookRotation(hit.normal, Vector3.up));
+                    Destroy(bulletImpactObject, 2f);
+                }
             }
-            else
-            {
-                GameObject bulletImpactObject = Instantiate(bulletImpact, hit.point + (hit.normal * .002f), Quaternion.LookRotation(hit.normal, Vector3.up));
-                Destroy(bulletImpactObject, 2f);
-            }
+            
         }
     }
 
@@ -343,12 +360,12 @@ public class PlayerControler : MonoBehaviourPunCallbacks
     }
 
     [PunRPC]
-    public void DealDamage(string damager, int damageAmount)
+    public void DealDamage(string damager, int damageAmount, int actor)
     {
-        TakeDamage(damager, damageAmount);
+        TakeDamage(damager, damageAmount, actor);
     }
 
-    public void TakeDamage(string damager, int damageAmount)
+    public void TakeDamage(string damager, int damageAmount, int actor)
     {
         if (photonView.IsMine)
         {
@@ -361,6 +378,8 @@ public class PlayerControler : MonoBehaviourPunCallbacks
             {
                 currentHealth = 0;
                 PlayerSpawner.instance.Die(damager);
+
+                MatchManager.instance.UpdateStatsSend(actor, 0, 1);
             }
         }
     }

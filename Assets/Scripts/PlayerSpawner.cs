@@ -38,6 +38,7 @@ public class PlayerSpawner : MonoBehaviour
     {
         UiController.instance.deathText.SetText("You were killed by: " + damager);
         UiController.instance.hitMarker.SetActive(false);
+        MatchManager.instance.UpdateStatsSend(PhotonNetwork.LocalPlayer.ActorNumber, 1, 1);
         if(player != null)
         {
             StartCoroutine(Respawn());
