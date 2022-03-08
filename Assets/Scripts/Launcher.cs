@@ -29,9 +29,12 @@ public class Launcher : MonoBehaviourPunCallbacks
     private List<GameButton> allGameButtons = new List<GameButton>();
     public GameObject namePanel;
     public TMP_Text nameInput;
-    private bool hasSetName;
+    public static bool hasSetName;
     public string levelToPlay;
     public GameObject startButton;
+    public GameObject testGameButton;
+    public string[] allMaps;
+    public bool changeMapBetweenRounds = true;
 
 
 
@@ -44,6 +47,13 @@ public class Launcher : MonoBehaviourPunCallbacks
         loadingText.SetText("Connecting to the server...");
 
         PhotonNetwork.ConnectUsingSettings();
+
+#if UNITY_EDITOR
+        testGameButton.SetActive(true);
+#endif
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
     }
 
     void CloseMenus()
@@ -82,10 +92,11 @@ public class Launcher : MonoBehaviourPunCallbacks
             {
                 nameInput.text = PlayerPrefs.GetString("playerName");
             }
-            else
-            {
-                PhotonNetwork.NickName = PlayerPrefs.GetString("playerName");
-            }
+            
+        }
+        else
+        {
+           PhotonNetwork.NickName = PlayerPrefs.GetString("playerName");
         }
     }
 
@@ -258,7 +269,9 @@ public class Launcher : MonoBehaviourPunCallbacks
 
     public void StartGame()
     {
-        PhotonNetwork.LoadLevel(levelToPlay);
+        //PhotonNetwork.LoadLevel(levelToPlay);
+
+        PhotonNetwork.LoadLevel(allMaps[Random.Range(0, allMaps.Length)]);
     }
 
     public override void OnMasterClientSwitched(Player newMasterClient)
@@ -273,7 +286,13 @@ public class Launcher : MonoBehaviourPunCallbacks
         }
     }
 
-
+    public void QuickJoin()
+    {
+        PhotonNetwork.CreateRoom("Test");
+        CloseMenus();
+        loadingText.SetText("Creating Room");
+        loadingScreen.SetActive(true);
+    }
 
     public void QuitGame()
     {

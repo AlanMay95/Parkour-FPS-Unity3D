@@ -10,4 +10,5 @@ public class Gun : MonoBehaviour
     public GameObject muzzleFlash = null;
     public int damage;
     public float reloadTime;
+    public float range;
 }

@@ -13,6 +13,10 @@ public class UiController : MonoBehaviour
     public TMP_Text deathText;
     public GameObject hitMarker;
     public Image damageIndicator;
+    public GameObject scoreboard;
+    public LeaderBoardPlayer leaderboardPlayerDisplay;
+    public GameObject roundOver;
+    public GameObject scoreboardText;
 
     private void Awake()
     {

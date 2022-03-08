@@ -7,7 +7,7 @@ using Photon.Pun;
 public class PlayerControler : MonoBehaviourPunCallbacks
 {
     public Transform viewPoint;
-    public float mouseSensativity = 1.5f, moveSpeed = 5f, runSpeed = 8f, wallRunSpeed = 10f, jumpForce = 3f, gravityMod = .9f;
+    public float mouseSensativity = 1.5f, moveSpeed = 5f, runSpeed = 8f, jumpForce = 3f, gravityMod = .9f;
     private float vertRotStore;
     public Vector2 mouseInput;
     public bool invertLook;
@@ -31,9 +31,10 @@ public class PlayerControler : MonoBehaviourPunCallbacks
     public float healFactor;
     public float missingHelath = 0;
     public Animator knifeAnim;
-    private bool canDoubleJump;
     public float timeToHeal = 2f;
     public Animator pAnim;
+    public GameObject playerModel;
+    public Transform modelGunPoint, gunHolder;
 
 
 
@@ -46,12 +47,19 @@ public class PlayerControler : MonoBehaviourPunCallbacks
         cam = Camera.main;
 
         photonView.RPC("SetGun", RpcTarget.All, selectedGun);
-        UiController.instance.damageIndicator.gameObject.SetActive(false);
 
+        if (photonView.IsMine)
+        {
+            playerModel.SetActive(false);
+            UiController.instance.damageIndicator.gameObject.SetActive(false);
+        }
+        else
+        {
+            gunHolder.parent = modelGunPoint;
+            gunHolder.localPosition = Vector3.zero;
+            gunHolder.localRotation = Quaternion.identity;
+        }
 
-        //Transform newTrans = SpawnManager.instance.GetFFASpawnPoint();
-        //transform.position = newTrans.position;
-        //transform.rotation = newTrans.rotation;
     }
 
     // Update is called once per frame
@@ -81,11 +89,7 @@ public class PlayerControler : MonoBehaviourPunCallbacks
             moveDir = new Vector3(Input.GetAxisRaw("Horizontal"), 0f, Input.GetAxisRaw("Vertical"));
 
             //Sprint check
-            if((canWallRunLeft || canWallRunRight) && !isGrounded)
-            {
-                activeMoveSpeed = wallRunSpeed;
-            }
-            else if (Input.GetKey(KeyCode.LeftShift))
+            if (Input.GetKey(KeyCode.LeftShift))
             {
                 activeMoveSpeed = runSpeed;
             }
@@ -106,18 +110,13 @@ public class PlayerControler : MonoBehaviourPunCallbacks
             }
 
             //Jump checks
-            isGrounded = Physics.Raycast(groundCheckPoint.position, Vector3.down, .5f, groundLayers);
-            canWallClimb = Physics.Raycast(transform.position, wallCheckPoint.forward, 1f, groundLayers);
-            canWallRunRight = Physics.Raycast(transform.position, wallCheckPoint.right, 1f, groundLayers);
-            canWallRunLeft = Physics.Raycast(transform.position, -wallCheckPoint.right, 1f, groundLayers);
+            isGrounded = Physics.Raycast(groundCheckPoint.position, Vector3.down, .25f, groundLayers);
+            canWallClimb = Physics.Raycast(transform.position, wallCheckPoint.forward, .5f, groundLayers);
+            canWallRunRight = Physics.Raycast(transform.position, wallCheckPoint.right, .5f, groundLayers);
+            canWallRunLeft = Physics.Raycast(transform.position, -wallCheckPoint.right, .5f, groundLayers);
             canWallJump = canWallClimb || canWallRunLeft || canWallRunRight;
 
-            if (isGrounded || canWallJump)
-            {
-                canDoubleJump = true;
-            }
-            
-            // Standing animation
+                // Standing animation
             if (isGrounded)
             {
                 pAnim.SetBool("grounded", true);
@@ -135,11 +134,6 @@ public class PlayerControler : MonoBehaviourPunCallbacks
                 if (isGrounded || canWallJump)
                 {
                     Jump();
-                }
-                else if (canDoubleJump)
-                {
-                    Jump();
-                    canDoubleJump = false;
                 }
             }
 
@@ -283,19 +277,22 @@ public class PlayerControler : MonoBehaviourPunCallbacks
 
             if (Physics.Raycast(ray, out RaycastHit hit))
             {
-                if (hit.collider.gameObject.tag == "Player")
+                if (hit.distance <= allGuns[selectedGun].range)
                 {
-                    Debug.Log("Hit " + hit.collider.gameObject.GetPhotonView().Owner.NickName);
-                    PhotonNetwork.Instantiate(playerHitImpact.name, hit.point, Quaternion.identity);
-                    StartCoroutine(HitMarker());
-                    
+                    if (hit.collider.gameObject.tag == "Player")
+                    {
+                        Debug.Log("Hit " + hit.collider.gameObject.GetPhotonView().Owner.NickName);
+                        PhotonNetwork.Instantiate(playerHitImpact.name, hit.point, Quaternion.identity);
+                        StartCoroutine(HitMarker());
 
-                    hit.collider.gameObject.GetPhotonView().RPC("DealDamage", RpcTarget.All, photonView.Owner.NickName, allGuns[selectedGun].damage, PhotonNetwork.LocalPlayer.ActorNumber);
-                }
-                else
-                {
-                    GameObject bulletImpactObject = Instantiate(bulletImpact, hit.point + (hit.normal * .002f), Quaternion.LookRotation(hit.normal, Vector3.up));
-                    Destroy(bulletImpactObject, 2f);
+
+                        hit.collider.gameObject.GetPhotonView().RPC("DealDamage", RpcTarget.All, photonView.Owner.NickName, allGuns[selectedGun].damage, PhotonNetwork.LocalPlayer.ActorNumber);
+                    }
+                    else
+                    {
+                        GameObject bulletImpactObject = Instantiate(bulletImpact, hit.point + (hit.normal * .002f), Quaternion.LookRotation(hit.normal, Vector3.up));
+                        Destroy(bulletImpactObject, 2f);
+                    }
                 }
             }
 
@@ -315,7 +312,7 @@ public class PlayerControler : MonoBehaviourPunCallbacks
 
         if (Physics.Raycast(ray, out RaycastHit hit))
         {
-            if (hit.distance <= 3)
+            if (hit.distance <= allGuns[selectedGun].range)
             {
                 if (hit.collider.gameObject.tag == "Player")
                 {
@@ -390,8 +387,16 @@ public class PlayerControler : MonoBehaviourPunCallbacks
     {
         if (photonView.IsMine)
         {
-        cam.transform.position = viewPoint.position;
-        cam.transform.rotation = viewPoint.rotation;
+            if(MatchManager.instance.state == MatchManager.GameState.Playing)
+            {
+                cam.transform.position = viewPoint.position;
+                cam.transform.rotation = viewPoint.rotation;
+            }
+            else
+            {
+                cam.transform.position = MatchManager.instance.mapCamPoint.position;
+                cam.transform.rotation = MatchManager.instance.mapCamPoint.rotation;
+            }
         }    
     }
 
